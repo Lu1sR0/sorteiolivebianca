@@ -1,36 +1,58 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Sorteio da live da Bianca
 
-## Getting Started
+Máquina de sorteio em formato caça-níquel, feita pra rodar ao vivo: puxa a
+alavanca, os rolos giram e param no número sorteado.
 
-First, run the development server:
+O resultado **não vem do aleatório deste computador**. Vem de um beacon público
+de aleatoriedade, e pode ser recalculado por qualquer pessoa depois:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run verificar -- sorteio.json
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Como isso funciona e o que exatamente fica provado está em
+[VERIFICACAO.md](VERIFICACAO.md).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Rodando
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm install
+npm run dev
+```
 
-## Learn More
+A página abre em <http://localhost:3000>.
 
-To learn more about Next.js, take a look at the following resources:
+## Usando na live
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- **Puxar**: arraste a bola vermelha pra baixo até os marcadores ficarem
+  vermelhos e solte. Um clique ou a barra de espaço também servem.
+- **Tela cheia**: botão no rodapé, pra transmitir sem a barra do navegador.
+- **Tirar sorteados do pote**: ligado por padrão. Se o ganhador não quiser o
+  prêmio, é só puxar de novo — ele já sai do pote.
+- **Baixar prova**: gera o `sorteio.json` com tudo que é preciso pra verificar.
+  **Baixe antes de fechar a aba** — os sorteios ficam só na memória da página.
+- **Zerar sorteio**: limpa o histórico e devolve todo mundo ao pote. Pede
+  confirmação em dois cliques.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+> Precisa de internet durante a live: cada sorteio espera uma rodada do drand.
+> Sem rede, a máquina avisa e **não sorteia** — em vez de cair calada num
+> aleatório local que ninguém conseguiria conferir depois.
 
-## Deploy on Vercel
+## Antes de sortear
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Publique o hash da lista (aparece no rodapé da página, em "sorteio verificável")
+em algum lugar com data — o próprio grupo do WhatsApp serve. É isso que prova,
+depois, que a lista não foi mexida.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Editando a lista
+
+Um número por item em [`lib/participantes.json`](lib/participantes.json), no
+formato `"DDD NNNNN-NNNN"` (ou `"DDD NNNN-NNNN"` pros antigos de 8 dígitos).
+Formato errado ou número repetido quebra na hora, em vez de sumir calado do
+sorteio.
+
+Mexer na lista muda o hash — então mexa **antes** de publicá-lo.
+
+## Stack
+
+Next.js 16 · React 19 · Tailwind 4 · GSAP · drand (quicknet) · @noble/curves

@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# prova exportada pela maquina (gerada na hora do sorteio)
+sorteio.json

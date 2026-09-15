@@ -17,8 +17,10 @@ const DIGITOS = "0123456789".split("");
 const VOLTAS = 6;
 
 export type RoloHandle = {
-  /** Gira e trava no simbolo pedido. `aoTravar` dispara no baque. */
-  girar: (alvo: string, duracao: number, aoTravar: () => void) => void;
+  /** Comeca a girar solto, sem destino. Usado enquanto o beacon nao chega. */
+  girarSolto: () => void;
+  /** Interrompe o giro solto e trava no simbolo. `aoTravar` dispara no baque. */
+  travarEm: (alvo: string, duracao: number, aoTravar: () => void) => void;
   /** Coloca o simbolo na janela sem animacao. */
   fixar: (alvo: string) => void;
   /** Mata qualquer animacao em curso. */
@@ -84,7 +86,31 @@ export const Rolo = forwardRef<RoloHandle, Props>(function Rolo(
       posicionar(alvo);
     },
 
-    girar(alvo, duracao, aoTravar) {
+    girarSolto() {
+      const fita = fitaRef.current;
+      const janela = janelaRef.current;
+      if (!fita || !janela) return;
+
+      animacao.current?.kill();
+      posicionar(atual.current);
+
+      janela.classList.add("girando-rolo");
+      janela.classList.remove("travando");
+
+      // Laco sem fim: a fita repete os mesmos simbolos a cada volta, entao
+      // voltar ao topo no fim do ciclo nao aparece.
+      const h = alturaCasa();
+      const voltaCompleta = (VOLTAS - 1) * simbolos.length * h;
+      const tl = gsap.timeline({ repeat: -1 });
+      tl.fromTo(
+        fita,
+        { y: 0 },
+        { y: -voltaCompleta, duration: 1.15, ease: "none" },
+      );
+      animacao.current = tl;
+    },
+
+    travarEm(alvo, duracao, aoTravar) {
       const fita = fitaRef.current;
       const janela = janelaRef.current;
       if (!fita || !janela) return;
@@ -96,8 +122,12 @@ export const Rolo = forwardRef<RoloHandle, Props>(function Rolo(
       const destino = (VOLTAS - 1) * simbolos.length + (i < 0 ? 0 : i);
       const yFinal = -(destino * h);
 
-      // Volta pro comeco da fita mostrando o mesmo simbolo, pra nao dar salto.
-      posicionar(atual.current);
+      // Recua um numero inteiro de voltas: a face visivel nao muda (os simbolos
+      // se repetem), mas garante pista suficiente pra desacelerar bonito.
+      const yAtual = (gsap.getProperty(fita, "y") as number) ?? 0;
+      const ciclo = simbolos.length * h;
+      gsap.set(fita, { y: yAtual + Math.floor(-yAtual / ciclo) * ciclo });
+
       atual.current = alvo;
 
       janela.classList.add("girando-rolo");

@@ -4,63 +4,77 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import gsap from "gsap";
 import {
   CASAS,
+  IDS,
+  LINHAS,
   PARTICIPANTES,
   REPOUSO,
+  porId,
   type Participante,
 } from "@/lib/participantes";
-import { idDoSorteio, sortear } from "@/lib/sorteio";
+import {
+  GENESIS,
+  hashDaLista,
+  hexParaBytes,
+  sha256,
+  sortearVerificavel,
+} from "@/lib/prova.mjs";
+import { CADEIA, esperarRodada, rodadaAtual } from "@/lib/drand.mjs";
 import * as som from "@/lib/som";
 import { Alavanca } from "./Alavanca";
 import { Confete, type ConfeteHandle } from "./Confete";
+import { Prova, type Registro } from "./Prova";
 import { Rolo, type RoloHandle } from "./Rolo";
 
-/** Tempo de giro do primeiro rolo, em segundos. */
-const BASE = 2.1;
+/** Quantas rodadas a frente o sorteio e marcado. 2 x 3s = ~6s de antecedencia. */
+const ANTECEDENCIA = 2;
+/** Tempo de frenagem do primeiro rolo, em segundos. */
+const BASE = 0.9;
 /** Quanto cada rolo seguinte demora a mais que o anterior. */
-const PASSO = 0.2;
+const PASSO = 0.18;
 /** Folga extra no ultimo rolo — e onde mora o suspense. */
-const SUSPENSE = 0.55;
+const SUSPENSE = 0.5;
 
 type Fase = "parada" | "girando" | "premiada";
-
-type Registro = {
-  codigo: string;
-  participante: Participante;
-  hora: string;
-};
-
-function agora(): string {
-  return new Date().toLocaleTimeString("pt-BR", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-}
 
 export function Maquina() {
   const [fase, setFase] = useState<Fase>("parada");
   const [ganhador, setGanhador] = useState<Participante | null>(null);
-  const [historico, setHistorico] = useState<Registro[]>([]);
+  const [registros, setRegistros] = useState<Registro[]>([]);
   const [excluirSorteados, setExcluirSorteados] = useState(true);
   const [mudo, setMudo] = useState(false);
   const [copiado, setCopiado] = useState(false);
   const [confirmando, setConfirmando] = useState(false);
+  const [listaHash, setListaHash] = useState<string | null>(null);
+  const [rodadaMarcada, setRodadaMarcada] = useState<number | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
 
   const rolos = useRef<(RoloHandle | null)[]>([]);
   const confeteRef = useRef<ConfeteHandle>(null);
   const claraoRef = useRef<HTMLDivElement>(null);
   const pararZunido = useRef<(() => void) | null>(null);
 
+  const excluidos = useMemo(
+    () => (excluirSorteados ? registros.map((r) => r.ganhador) : []),
+    [excluirSorteados, registros],
+  );
+
   const pote = useMemo(() => {
-    if (!excluirSorteados) return PARTICIPANTES;
-    const fora = new Set(historico.map((h) => h.participante.id));
+    const fora = new Set(excluidos);
     return PARTICIPANTES.filter((p) => !fora.has(p.id));
-  }, [excluirSorteados, historico]);
+  }, [excluidos]);
 
   const vazio = pote.length === 0;
 
   const repousar = useCallback(() => {
     REPOUSO.forEach((c, i) => rolos.current[i]?.fixar(c));
+  }, []);
+
+  // O hash da lista e calculado uma vez e fica visivel na tela o tempo todo:
+  // e ele que prova, depois, que a lista nao mudou durante a live.
+  useEffect(() => {
+    hashDaLista(LINHAS as string[])
+      .then(setListaHash)
+      .catch((e: unknown) => setErro(String(e)));
   }, []);
 
   useEffect(() => {
@@ -79,48 +93,105 @@ export function Maquina() {
     };
   }, []);
 
-  const puxar = useCallback(() => {
-    if (fase === "girando" || vazio) return;
+  const puxar = useCallback(async () => {
+    if (fase === "girando" || vazio || !listaHash) return;
 
-    const escolhido = sortear(pote);
-    const codigo = idDoSorteio();
+    // 1. Compromisso: escolhe uma rodada do drand que AINDA NAO EXISTE e mostra
+    //    o numero dela na tela antes de girar. Como ninguem — nem quem esta
+    //    operando — consegue prever a aleatoriedade dessa rodada, o resultado
+    //    esta fora do alcance de qualquer um neste instante.
+    const alvo = rodadaAtual() + ANTECEDENCIA;
+    const n = registros.length + 1;
+    const anterior = registros[0]?.hash ?? GENESIS;
+    const excluidosAgora = [...excluidos];
 
     setFase("girando");
     setGanhador(null);
     setCopiado(false);
     setConfirmando(false);
+    setErro(null);
+    setRodadaMarcada(alvo);
 
+    rolos.current.forEach((r) => r?.girarSolto());
     pararZunido.current?.();
     pararZunido.current = som.girar();
 
-    escolhido.casas.forEach((simbolo, i) => {
-      const ultimo = i === CASAS - 1;
-      const duracao = BASE + i * PASSO + (ultimo ? SUSPENSE : 0);
-
-      rolos.current[i]?.girar(simbolo, duracao, () => {
-        som.travar(i);
-        if (!ultimo) return;
-
-        pararZunido.current?.();
-        pararZunido.current = null;
-
-        setFase("premiada");
-        setGanhador(escolhido);
-        setHistorico((h) => [
-          { codigo, participante: escolhido, hora: agora() },
-          ...h,
-        ]);
-
-        som.premio();
-        confeteRef.current?.disparar();
-        gsap.fromTo(
-          claraoRef.current,
-          { opacity: 0.5 },
-          { opacity: 0, duration: 0.7, ease: "power2.out" },
-        );
+    try {
+      // 2. Espera a rodada ser publicada pela rede do drand.
+      const { rodada, assinatura, origem } = await esperarRodada(alvo, {
+        timeoutMs: 25000,
       });
-    });
-  }, [fase, pote, vazio]);
+
+      // 3. A aleatoriedade e derivada da assinatura, nao lida do servidor.
+      const aleatoriedade = await sha256(hexParaBytes(assinatura));
+
+      const resultado = await sortearVerificavel({
+        ids: IDS as string[],
+        listaHash,
+        n,
+        rodada,
+        aleatoriedade,
+        anterior,
+        excluidos: excluidosAgora,
+      });
+
+      const premiado = porId(resultado.ganhador);
+      if (!premiado) throw new Error(`Ganhador ${resultado.ganhador} nao esta na lista`);
+
+      const registro: Registro = {
+        n,
+        rodada,
+        assinatura,
+        aleatoriedade,
+        listaHash,
+        anterior,
+        excluidos: excluidosAgora,
+        semente: resultado.semente,
+        indice: resultado.indice,
+        tamanhoDoPote: resultado.tamanhoDoPote,
+        ganhador: resultado.ganhador,
+        hash: resultado.hash,
+        momento: new Date().toISOString(),
+        origem,
+      };
+
+      // 4. Trava os rolos no numero que a matematica ja decidiu.
+      premiado.casas.forEach((simbolo, i) => {
+        const ultimo = i === CASAS - 1;
+        const duracao = BASE + i * PASSO + (ultimo ? SUSPENSE : 0);
+
+        rolos.current[i]?.travarEm(simbolo, duracao, () => {
+          som.travar(i);
+          if (!ultimo) return;
+
+          pararZunido.current?.();
+          pararZunido.current = null;
+
+          setFase("premiada");
+          setGanhador(premiado);
+          setRegistros((rs) => [registro, ...rs]);
+
+          som.premio();
+          confeteRef.current?.disparar();
+          gsap.fromTo(
+            claraoRef.current,
+            { opacity: 0.5 },
+            { opacity: 0, duration: 0.7, ease: "power2.out" },
+          );
+        });
+      });
+    } catch (e) {
+      // Sem beacon nao ha sorteio. Melhor falhar na cara do que cair calado
+      // num aleatorio local que ninguem consegue conferir depois.
+      pararZunido.current?.();
+      pararZunido.current = null;
+      rolos.current.forEach((r) => r?.encerrar());
+      repousar();
+      setFase("parada");
+      setRodadaMarcada(null);
+      setErro(e instanceof Error ? e.message : String(e));
+    }
+  }, [fase, vazio, listaHash, registros, excluidos, repousar]);
 
   // Barra de espaco puxa a alavanca, desde que o foco nao esteja num controle.
   useEffect(() => {
@@ -129,7 +200,7 @@ export function Maquina() {
       const alvo = e.target as HTMLElement | null;
       if (alvo && alvo.closest("button, a, input, select, textarea")) return;
       e.preventDefault();
-      puxar();
+      void puxar();
     };
     window.addEventListener("keydown", aoTeclar);
     return () => window.removeEventListener("keydown", aoTeclar);
@@ -153,14 +224,16 @@ export function Maquina() {
 
   const reiniciar = useCallback(() => {
     if (fase === "girando") return;
-    setHistorico([]);
+    setRegistros([]);
     setGanhador(null);
     setFase("parada");
     setConfirmando(false);
+    setRodadaMarcada(null);
+    setErro(null);
     repousar();
   }, [fase, repousar]);
 
-  const atual = historico[0];
+  const atual = registros[0];
   const emRepouso = fase === "parada" && !ganhador;
 
   return (
@@ -236,24 +309,44 @@ export function Maquina() {
           </div>
 
           <div className="flex items-center justify-center lg:items-end">
-            <Alavanca aoPuxar={puxar} desabilitada={fase === "girando" || vazio} />
+            <Alavanca
+              aoPuxar={() => void puxar()}
+              desabilitada={fase === "girando" || vazio || !listaHash}
+            />
           </div>
         </div>
 
         <div className="flex min-h-[7.5rem] w-full max-w-[64rem] flex-col items-center justify-center gap-3 text-center">
-          {vazio && fase !== "premiada" ? (
+          {erro ? (
+            <>
+              <p className="font-display text-xl font-semibold text-accent uppercase">
+                Sorteio nao concluido
+              </p>
+              <p className="max-w-[34rem] text-sm text-ink-2">{erro}</p>
+              <p className="rotulo">
+                nenhum ganhador foi escolhido — puxe a alavanca de novo
+              </p>
+            </>
+          ) : vazio && fase !== "premiada" ? (
             <>
               <p className="font-display text-xl font-semibold text-ink uppercase">
                 Acabou o pote
               </p>
               <p className="text-sm text-ink-2">
-                Todo mundo ja foi sorteado. Reinicie pra rodar tudo de novo.
+                Todo mundo ja foi sorteado. Zere o sorteio pra rodar tudo de novo.
               </p>
             </>
           ) : fase === "girando" ? (
-            <p className="font-display text-xl tracking-[0.3em] text-ink-2 uppercase">
-              Sorteando
-            </p>
+            <>
+              <p className="font-display text-xl tracking-[0.3em] text-ink-2 uppercase">
+                Sorteando
+              </p>
+              <p className="rotulo">
+                aguardando a rodada{" "}
+                <span className="text-accent tabular-nums">#{rodadaMarcada}</span> do
+                drand
+              </p>
+            </>
           ) : ganhador && atual ? (
             <>
               <p className="rotulo text-accent">Ganhador</p>
@@ -280,8 +373,8 @@ export function Maquina() {
               </div>
 
               <p className="rotulo mt-1">
-                sorteio #{atual.codigo} &middot; {atual.hora} &middot;{" "}
-                {excluirSorteados ? pote.length + 1 : pote.length} concorrendo
+                sorteio {atual.n} &middot; rodada #{atual.rodada} &middot; indice{" "}
+                {atual.indice} de {atual.tamanhoDoPote}
               </p>
             </>
           ) : (
@@ -290,12 +383,20 @@ export function Maquina() {
                 Puxe a alavanca
               </p>
               <p className="text-sm text-ink-2">
-                {PARTICIPANTES.length} numeros no pote. Arraste a bola pra baixo
-                ou aperte espaco.
+                {pote.length} numeros no pote. Arraste a bola pra baixo ou aperte
+                espaco.
               </p>
             </>
           )}
         </div>
+
+        <Prova
+          listaHash={listaHash}
+          total={PARTICIPANTES.length}
+          rodadaMarcada={fase === "girando" ? rodadaMarcada : null}
+          registros={registros}
+          cadeia={CADEIA.hash}
+        />
       </main>
 
       <footer className="border-t border-hairline">
@@ -314,7 +415,7 @@ export function Maquina() {
             </Controle>
             <Controle onClick={telaCheia}>tela cheia</Controle>
 
-            {historico.length > 0 && (
+            {registros.length > 0 && (
               <button
                 type="button"
                 onClick={() => (confirmando ? reiniciar() : setConfirmando(true))}
@@ -328,20 +429,20 @@ export function Maquina() {
               >
                 {confirmando
                   ? "confirmar? zera tudo"
-                  : `zerar sorteio (${historico.length})`}
+                  : `zerar sorteio (${registros.length})`}
               </button>
             )}
           </div>
 
-          {historico.length > 0 && (
+          {registros.length > 0 && (
             <div className="flex min-w-0 items-center gap-2 overflow-x-auto">
               <span className="rotulo shrink-0">ja sairam</span>
-              {historico.map((h, i) => (
+              {registros.map((r) => (
                 <span
-                  key={`${h.codigo}-${i}`}
+                  key={r.hash}
                   className="shrink-0 rounded-[3px] border border-hairline px-2 py-1 font-mono text-[0.68rem] text-ink-2"
                 >
-                  {h.participante.display}
+                  {porId(r.ganhador)?.display ?? r.ganhador}
                 </span>
               ))}
             </div>

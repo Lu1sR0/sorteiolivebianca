@@ -1,26 +1,566 @@
 @import "tailwindcss";
 
+@theme {
+  /* Mesma paleta do projeto da live: off-black frio, um vermelho de sinal,
+     e o ambar reservado pras lampadas do letreiro. */
+  --color-ground: #08090b;
+  --color-surface: #0e1013;
+  --color-surface-2: #14171a;
+  --color-surface-3: #1c2023;
+  --color-hairline: rgba(255, 255, 255, 0.1);
+  --color-hairline-strong: rgba(255, 255, 255, 0.22);
+  --color-ink: #eef1f3;
+  --color-ink-2: #9aa3ab;
+  --color-ink-3: #5f676e;
+  --color-accent: #ff3b4a;
+  --color-accent-deep: #c9202e;
+  --color-accent-ink: #1a0608;
+  --color-accent-soft: rgba(255, 59, 74, 0.14);
+  --color-lamp: #ffc53d;
+  --color-ok: #4ade80;
+
+  --font-display: var(--font-chakra), "Chakra Petch", system-ui, sans-serif;
+  --font-sans: var(--font-geist-sans), system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: dark;
+  /* Tamanho de uma casa do rolo. Todo o dimensionamento da maquina sai daqui.
+     A largura e derivada do viewport pra que os 11 rolos + o "+55" + o traco
+     caibam em qualquer tela sem estourar a linha. */
+  --casa-w: min(4.2rem, calc((100vw - 9rem) / 11.8));
+  --casa: calc(var(--casa-w) * 1.45);
+
+  --grao-url: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html,
+body {
+  background: var(--color-ground);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+::selection {
+  background: var(--color-accent);
+  color: var(--color-accent-ink);
+}
+
+/* ---------------------------------------------------------------- palco -- */
+
+.palco {
+  position: relative;
+  isolation: isolate;
+}
+
+/* Luz quente atras do gabinete, como o refletor de um cenario. */
+.palco::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(60% 45% at 50% 30%, rgba(255, 59, 74, 0.09), transparent 70%),
+    radial-gradient(90% 60% at 50% 110%, rgba(255, 197, 61, 0.05), transparent 70%);
+  pointer-events: none;
+}
+
+.grao {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+  opacity: 0.045;
+  mix-blend-mode: screen;
+  background-image: var(--grao-url);
+  background-size: 160px 160px;
+}
+
+.rotulo {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-ink-3);
+}
+
+/* ------------------------------------------------------------- gabinete -- */
+
+.gabinete {
+  position: relative;
+  border-radius: 1.25rem;
+  padding: clamp(0.6rem, 1.4vw, 1rem);
+  background: linear-gradient(180deg, #2a2f34 0%, #171b1f 18%, #101317 60%, #0a0c0e 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.8),
+    0 1px 0 rgba(255, 255, 255, 0.05),
+    0 30px 70px -20px rgba(0, 0, 0, 0.9),
+    0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+/* Escovado do metal: listras verticais quase imperceptiveis. */
+.gabinete::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0.35;
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.025) 0 1px,
+    transparent 1px 3px
+  );
+}
+
+.painel {
+  position: relative;
+  border-radius: 0.85rem;
+  background: linear-gradient(180deg, #0c0e11, #07080a);
+  box-shadow:
+    inset 0 2px 14px rgba(0, 0, 0, 0.95),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+}
+
+/* ------------------------------------------------------------- lampadas -- */
+
+.lampada {
+  width: 0.52rem;
+  height: 0.52rem;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 35% 30%, #fff6de, var(--color-lamp) 55%, #7a5408 100%);
+  box-shadow: 0 0 6px rgba(255, 197, 61, 0.55), 0 0 14px rgba(255, 197, 61, 0.25);
+  animation: lampada-correndo 1.4s linear infinite;
+  animation-delay: calc(var(--i) * -0.1s);
+}
+
+@keyframes lampada-correndo {
+  0%,
+  45% {
+    opacity: 1;
+    filter: brightness(1);
+  }
+  55%,
+  100% {
+    opacity: 0.22;
+    filter: brightness(0.5);
+  }
+}
+
+/* Na vitoria as lampadas viram vermelhas e piscam junto. */
+.premiado .lampada {
+  background: radial-gradient(circle at 35% 30%, #ffe3e6, var(--color-accent) 55%, #6b0d16 100%);
+  box-shadow: 0 0 10px rgba(255, 59, 74, 0.8), 0 0 26px rgba(255, 59, 74, 0.45);
+  animation-duration: 0.36s;
+}
+
+.girando .lampada {
+  animation-duration: 0.5s;
+}
+
+/* ---------------------------------------------------------------- rolos -- */
+
+.janela {
+  position: relative;
+  height: var(--casa);
+  width: var(--casa-w);
+  overflow: hidden;
+  border-radius: 0.3rem;
+  background: linear-gradient(180deg, #050607 0%, #101419 42%, #0c0f13 58%, #050607 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.07),
+    inset 0 8px 12px -6px rgba(0, 0, 0, 0.95),
+    inset 0 -8px 12px -6px rgba(0, 0, 0, 0.95);
+}
+
+/* Curvatura do tambor: escurece topo e base pra parecer cilindro. */
+.janela::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.85) 0%,
+    rgba(0, 0, 0, 0.1) 26%,
+    rgba(255, 255, 255, 0.05) 50%,
+    rgba(0, 0, 0, 0.1) 74%,
+    rgba(0, 0, 0, 0.85) 100%
+  );
+}
+
+.fita {
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+}
+
+.casa {
+  height: var(--casa);
+  display: grid;
+  place-items: center;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: calc(var(--casa) * 0.56);
+  line-height: 1;
+  color: var(--color-ink);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.8);
+}
+
+.casa-vazia {
+  color: var(--color-ink-3);
+  font-size: calc(var(--casa) * 0.3);
+}
+
+.janela.girando-rolo .fita {
+  filter: blur(3.5px);
+}
+
+.janela.travando .fita {
+  filter: blur(0);
+  transition: filter 0.12s linear;
+}
+
+/* Linha de pagamento atravessando os rolos. */
+.linha-premio {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  transform: translateY(-0.5px);
+  background: linear-gradient(90deg, transparent, var(--color-accent), transparent);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.premiado .janela {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 59, 74, 0.55),
+    inset 0 8px 12px -6px rgba(0, 0, 0, 0.9),
+    inset 0 -8px 12px -6px rgba(0, 0, 0, 0.9),
+    0 0 18px rgba(255, 59, 74, 0.28);
+}
+
+.premiado .casa {
+  color: #fff;
+  text-shadow: 0 0 14px rgba(255, 59, 74, 0.9);
+}
+
+/* Em repouso os digitos ficam apagados, pra ninguem confundir a combinacao
+   de descanso com um resultado de sorteio. */
+.repouso .casa {
+  color: var(--color-ink-3);
+  opacity: 0.5;
+}
+
+/* ---------------------------------------------------------------- faixa -- */
+
+.faixa {
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+}
+
+.faixa-conteudo {
+  display: flex;
+  width: max-content;
+  animation: faixa-correndo 90s linear infinite;
+}
+
+@keyframes faixa-correndo {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .faixa-conteudo {
+    animation: none;
+  }
+}
+
+/* ------------------------------------------------------------- alavanca -- */
+
+.alavanca-conjunto {
+  /* Distancia do pivo ate o centro da bola. Os marcadores do trilho usam
+     essa mesma medida, entao eles caem exatamente no caminho do braco. */
+  --haste: clamp(6.5rem, 15vw, 10.5rem);
+  --bola: clamp(2.4rem, 5vw, 3.4rem);
+  --raio: calc(var(--haste) + var(--bola) / 2 + 0.5rem);
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Ao lado do gabinete, o braco precisa de espaco a direita pra girar sem
+   ser cortado pela borda da tela. */
+@media (min-width: 64rem) {
+  .alavanca-conjunto {
+    padding-right: calc(var(--raio) * 0.8);
+  }
+}
+
+.alavanca-area {
+  position: relative;
+  width: calc(var(--bola) + 1.5rem);
+  height: var(--raio);
+}
+
+/* ---- braco (o proprio botao: pegar em qualquer ponto funciona) ---- */
+
+.alavanca-braco {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  margin-left: calc(var(--bola) / -2);
+  width: var(--bola);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform-origin: bottom center;
+  touch-action: none;
+  cursor: grab;
+  background: none;
+  border: 0;
+  padding: 0;
+  will-change: transform;
+}
+.alavanca-braco:active {
+  cursor: grabbing;
+}
+.alavanca-braco:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.alavanca-braco:focus-visible {
+  outline: none;
+}
+.alavanca-braco:focus-visible .alavanca-bola {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 5px;
+}
+
+/* Area de pega maior que o desenho, pra nao exigir mira no dedo. */
+.alavanca-braco::before {
+  content: "";
+  position: absolute;
+  inset: -0.9rem -1.1rem -0.4rem;
+  border-radius: 9999px;
+}
+
+.alavanca-bola {
+  width: var(--bola);
+  height: var(--bola);
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle at 34% 26%,
+    #ffb3ba 0%,
+    var(--color-accent) 40%,
+    var(--color-accent-deep) 74%,
+    #4d070e 100%
+  );
+  box-shadow:
+    inset 0 -7px 14px rgba(0, 0, 0, 0.55),
+    inset 0 3px 8px rgba(255, 255, 255, 0.28),
+    0 8px 20px rgba(0, 0, 0, 0.75),
+    0 0 22px rgba(255, 59, 74, 0.3);
+  transition: box-shadow 0.35s ease, transform 0.35s var(--ease-spring);
+}
+
+/* Colar cromado entre a bola e a haste. */
+.alavanca-colar {
+  width: calc(var(--bola) * 0.42);
+  height: 0.42rem;
+  margin-top: -0.12rem;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #4c545a, #e6ecf0 45%, #8f989f 62%, #33393d);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+.alavanca-haste {
+  width: 0.46rem;
+  height: var(--haste);
+  border-radius: 0 0 9999px 9999px;
+  background: linear-gradient(90deg, #5c646a 0%, #edf2f5 36%, #98a1a8 58%, #2f3539 100%);
+  box-shadow: 0 0 12px rgba(0, 0, 0, 0.7);
+}
+
+/* ---- pivo e base: o que prende a alavanca na maquina ---- */
+
+.alavanca-pivo {
+  position: absolute;
+  bottom: -0.55rem;
+  left: 50%;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-left: -0.75rem;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 36% 30%, #7d868d, #2a2f33 70%, #13171a);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    0 3px 8px rgba(0, 0, 0, 0.85);
+  z-index: 2;
+}
+
+.alavanca-base {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: calc(var(--bola) + 2.2rem);
+  padding: 0.5rem 0.55rem;
+  border-radius: 0.45rem;
+  background: linear-gradient(180deg, #262b30, #12161a 60%, #0b0e10);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 10px 22px -10px rgba(0, 0, 0, 0.9),
+    0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.alavanca-parafuso {
+  width: 0.3rem;
+  height: 0.3rem;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 35% 30%, #9aa3ab, #23282c);
+  box-shadow: inset 0 -1px 1px rgba(0, 0, 0, 0.7);
+}
+
+/* ---- trilho: pontos no caminho do braco ---- */
+
+.alavanca-trilho {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.alavanca-ponto {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 0;
+  height: var(--raio);
+  transform-origin: bottom center;
+}
+
+.alavanca-ponto::before {
+  content: "";
+  position: absolute;
+  top: -0.17rem;
+  left: -0.17rem;
+  width: 0.34rem;
+  height: 0.34rem;
+  border-radius: 9999px;
+  background: var(--color-ink-3);
+  opacity: 0;
+  transition: opacity 0.3s ease, background-color 0.3s ease, transform 0.3s ease;
+}
+
+.alavanca-pronta .alavanca-ponto::before {
+  opacity: 0.3;
+}
+
+.alavanca-puxando .alavanca-ponto::before {
+  opacity: 0.75;
+}
+
+.alavanca-puxando .no-gatilho::before {
+  background: var(--color-accent);
+  opacity: 1;
+  transform: scale(1.5);
+}
+
+/* ---- estados ---- */
+
+/* Respiro discreto convidando a puxar, so com a maquina parada. */
+.alavanca-pronta:not(.alavanca-puxando) .alavanca-bola {
+  animation: bola-respira 2.6s ease-in-out infinite;
+}
+
+.alavanca-armada .alavanca-bola {
+  animation: none;
+  transform: scale(1.06);
+  box-shadow:
+    inset 0 -7px 14px rgba(0, 0, 0, 0.55),
+    inset 0 3px 8px rgba(255, 255, 255, 0.28),
+    0 8px 20px rgba(0, 0, 0, 0.75),
+    0 0 0 3px rgba(255, 59, 74, 0.35),
+    0 0 42px rgba(255, 59, 74, 0.7);
+}
+
+.alavanca-armada .rotulo {
+  color: var(--color-accent);
+}
+
+@keyframes bola-respira {
+  0%,
+  100% {
+    box-shadow:
+      inset 0 -7px 14px rgba(0, 0, 0, 0.55),
+      inset 0 3px 8px rgba(255, 255, 255, 0.28),
+      0 8px 20px rgba(0, 0, 0, 0.75),
+      0 0 18px rgba(255, 59, 74, 0.22);
+  }
+  50% {
+    box-shadow:
+      inset 0 -7px 14px rgba(0, 0, 0, 0.55),
+      inset 0 3px 8px rgba(255, 255, 255, 0.28),
+      0 8px 20px rgba(0, 0, 0, 0.75),
+      0 0 40px rgba(255, 59, 74, 0.6);
+  }
+}
+
+/* -------------------------------------------------------------- flashes -- */
+
+.clarao {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+  background: #fff;
+  opacity: 0;
+}
+
+.confete {
+  position: fixed;
+  inset: 0;
+  z-index: 35;
+  pointer-events: none;
+}
+
+.botao {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  transition:
+    transform 0.4s var(--ease-spring),
+    background-color 0.3s,
+    color 0.3s,
+    border-color 0.3s;
+}
+.botao:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lampada,
+  .alavanca-pronta .alavanca-bola {
+    animation: none;
+  }
+  .janela.girando-rolo .fita {
+    filter: none;
+  }
 }
